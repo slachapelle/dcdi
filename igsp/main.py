@@ -10,10 +10,10 @@ import random
 from igsp import run_igsp, run_ut_igsp
 import sys
 sys.path.append("..")
-from causal_flow.plot import plot_adjacency
-from causal_flow.utils.save import dump
-from causal_flow.utils.metrics import edge_errors
-from causal_flow.data import DataManagerFile
+from dcdi.plot import plot_adjacency
+from dcdi.utils.save import dump
+from dcdi.utils.metrics import edge_errors
+from dcdi.data import DataManagerFile
 import causaldag
 
 

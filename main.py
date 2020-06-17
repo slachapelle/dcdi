@@ -5,7 +5,7 @@ import argparse
 import copy
 import numpy as np
 
-from causal_flow.main import main
+from dcdi.main import main
 
 
 if __name__ == "__main__":

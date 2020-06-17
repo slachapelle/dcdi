@@ -8,10 +8,10 @@ import networkx as nx
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from causal_flow.plot import plot_adjacency
-from causal_flow.utils.save import dump
-from causal_flow.utils.metrics import edge_errors
-from causal_flow.data import DataManagerFile
+from dcdi.plot import plot_adjacency
+from dcdi.utils.save import dump
+from dcdi.utils.metrics import edge_errors
+from dcdi.data import DataManagerFile
 from gies import GIES, retrain
 
 
