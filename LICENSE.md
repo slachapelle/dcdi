@@ -1,4 +1,4 @@
-MIT License
+# MIT License
 
 Copyright (c) 2020 Philippe Brouillard, Sébastien Lachapelle, Alexandre Lacoste (Element AI Inc.), Simon Lacoste-Julien, Alexandre Drouin (Element AI Inc.)
 
@@ -19,9 +19,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-### Acknowledgements of code reuse
+## Acknowledgements of code reuse
 
-- dcdi/torchkit.py is under copyright with the following licence:
+---
+
+File: `dcdi/torchkit.py` is under copyright with the following licence:
  
 MIT License
 
@@ -46,7 +48,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-- cam/cam.py, gies/gies.py, data/generation/causal_mechanisms, data/generation/dag_generator.py  contain code reused under copyright with the following licence:
+---
+
+Files: `cam/cam.py, gies/gies.py, data/generation/causal_mechanisms, data/generation/dag_generator.py` contain code reused under copyright with the following licence:
 
 MIT License
 
@@ -59,7 +63,8 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-- cam/cam_with_score.R contains code reused under copyright with the following licence:
+---
+File `cam/cam_with_score.R` contains code reused under copyright with the following licence:
 
 FreeBSD Licence
 
