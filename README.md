@@ -3,7 +3,7 @@ Repository for "Differentiable Causal Discovery from Interventional Data".
 
 * The code for DCDI is available [here](./dcdi).
 
-* The datasets used in the paper are available [here](./datasets)
+* The datasets used in the paper are available [here](./data)
 
 The code for the following baselines is also provided:
 * [CAM](./cam)
