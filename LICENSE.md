@@ -21,8 +21,6 @@ SOFTWARE.
 
 ## Acknowledgements of code reuse
 
----
-
 File: `dcdi/torchkit.py` is under copyright with the following licence:
  
 MIT License
