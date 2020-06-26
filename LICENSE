@@ -19,9 +19,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-====================================================================
-Acknowledgements of code reuse
-====================================================================
+### Acknowledgements of code reuse
 
 - dcdi/torchkit.py is under copyright with the following licence:
  
