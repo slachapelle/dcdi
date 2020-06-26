@@ -1,3 +1,11 @@
 # Differentiable Causal Discovery from Interventional Data
 Repository for "Differentiable Causal Discovery from Interventional Data".
-It includes code for DCDI and the baselines methods: GIES, CAM, IGSP and UT-IGSP.
+
+* The code for DCDI is available [here](./dcdi).
+
+* The datasets used in the paper are available [here](./datasets)
+
+The code for the following baselines is also provided:
+* [CAM](./cam)
+* [GIES](./gies)
+* [IGSP and UT-IGSP](./igsp)
