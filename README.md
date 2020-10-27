@@ -1,4 +1,7 @@
 # Differentiable Causal Discovery from Interventional Data
+
+![DCDI paper graphics](https://github.com/slachapelle/dcdi/raw/master/paper_graphic.png)
+
 Repository for "Differentiable Causal Discovery from Interventional Data".
 
 * The code for DCDI is available [here](./dcdi).
