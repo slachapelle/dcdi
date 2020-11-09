@@ -1,5 +1,4 @@
 import networkx as nx
-
 from cdt.metrics import retrieve_adjacency_matrix
 
 

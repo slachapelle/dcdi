@@ -1,48 +1,67 @@
-import sys
+"""
+GraN-DAG
+
+Copyright © 2019 Sébastien Lachapelle, Philippe Brouillard, Tristan Deleu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
+Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+"""
 import cdt
 import os
 import time
-import math
 import copy
 import numpy as np
-
-np.set_printoptions(linewidth=200)
-from sklearn.ensemble import ExtraTreesRegressor
-from sklearn.feature_selection import SelectFromModel
 import torch
-import pandas as pd
 from cdt.utils.R import RPackages, launch_R_script
 
 from .dag_optim import compute_dag_constraint, is_acyclic
 from .prox import monkey_patch_RMSprop
 from .utils.metrics import edge_errors, shd as shd_metric
 from .utils.penalty import compute_penalty
-from .utils.save import dump, load, np_to_csv
-from .plot import plot_learned_density, plot_weighted_adjacency, plot_adjacency, plot_learning_curves, plot_interv_w
-
+from .utils.save import dump, load
+from .plot import plot_learned_density, plot_weighted_adjacency, plot_adjacency, plot_learning_curves, plot_interv_w, plot_learning_curves_retrain
+np.set_printoptions(linewidth=200)
 EPSILON = 1e-8
 
 
 def compute_loss(x, mask, regime, model, weights, biases, extra_params, intervention,
-                 intervention_type, intervention_knowledge):
+                 intervention_type, intervention_knowledge, mean_std=False):
+    # TODO: add param
+    """
+    Compute the loss. If intervention is perfect and known, remove
+    the intervened targets from the loss with a mask.
+    """
     if intervention and intervention_type == "perfect" and intervention_knowledge =="known":
-        # in the case of perfect-known interventions, remove the intervened
-        # targets from the loss with a mask
-        likelihood = model.compute_log_likelihood(x, weights, biases, extra_params)
-        loss = torch.sum(likelihood * mask, dim=0) / mask.size(0)
+        log_likelihood = model.compute_log_likelihood(x, weights, biases, extra_params)
+        log_likelihood = torch.sum(log_likelihood * mask, dim=0) / mask.size(0)
     else:
-        likelihood = model.compute_log_likelihood(x, weights, biases, extra_params,
-                                                  mask=mask, regime=regime)
-        loss = torch.sum(likelihood, dim=0) / mask.size(0)
-    loss = - torch.mean(loss)
+        log_likelihood = model.compute_log_likelihood(x, weights, biases,
+                                                  extra_params, mask=mask,
+                                                  regime=regime)
+        log_likelihood = torch.sum(log_likelihood, dim=0) / mask.size(0)
+    loss = - torch.mean(log_likelihood)
 
-    return loss
+    if not mean_std:
+        return loss
+    else:
+        joint_log_likelihood = torch.mean(log_likelihood * mask, dim=1)
+        return loss, torch.sqrt(torch.var(joint_log_likelihood) / joint_log_likelihood.size(0))
 
 
 def train(model, gt_adjacency, gt_interv, train_data, test_data, opt, metrics_callback, plotting_callback):
     """
     Applying augmented Lagrangian to solve the continuous constrained problem.
-
     """
     first_stop = 0
     second_stop = 0
@@ -79,7 +98,7 @@ def train(model, gt_adjacency, gt_interv, train_data, test_data, opt, metrics_ca
     nlls = []  # NLL on train
     nlls_val = []  # NLL on validation
     delta_mu = np.inf
-    w_adj_mode = "gumbel" if model.gumbel else "prod"
+    w_adj_mode = "gumbel"
 
     # Augmented Lagrangian stuff
     mu = opt.mu_init
@@ -99,7 +118,7 @@ def train(model, gt_adjacency, gt_interv, train_data, test_data, opt, metrics_ca
     # compute constraint normalization
     with torch.no_grad():
         full_adjacency = torch.ones((model.num_vars, model.num_vars)) - torch.eye(model.num_vars)
-        constraint_normalization = compute_dag_constraint(model, full_adjacency).item()
+        constraint_normalization = compute_dag_constraint(full_adjacency).item()
 
     # Learning loop:
     for iter in range(opt.num_train_iter):
@@ -117,7 +136,7 @@ def train(model, gt_adjacency, gt_interv, train_data, test_data, opt, metrics_ca
 
         # constraint related
         w_adj = model.get_w_adj()
-        h = compute_dag_constraint(model, w_adj) / constraint_normalization
+        h = compute_dag_constraint(w_adj) / constraint_normalization
         constraint_violation = h.item()
 
         # compute regularizer
@@ -304,7 +323,7 @@ def train(model, gt_adjacency, gt_interv, train_data, test_data, opt, metrics_ca
                 with torch.no_grad():
                     higher = (w_adj > 0.5).type(torch.Tensor)
                     lower = (w_adj <= 0.5).type(torch.Tensor)
-                    model.gumbel_adjacency.log_alpha.copy_(higher * 6 + lower * -6)
+                    model.gumbel_adjacency.log_alpha.copy_(higher * 100 + lower * -100)
                     model.gumbel_adjacency.log_alpha.requires_grad = False
                     model.adjacency.copy_(higher)
                 best_nll_val = np.inf
@@ -409,7 +428,7 @@ def train(model, gt_adjacency, gt_interv, train_data, test_data, opt, metrics_ca
                     del plot_data
 
 
-                ### SAVE RESULTS
+                # save results
                 model.eval()
                 _, mask, regime = train_data.sample(train_data.num_samples)
 
@@ -442,3 +461,141 @@ def train(model, gt_adjacency, gt_interv, train_data, test_data, opt, metrics_ca
                                           })
 
                 return model
+
+def retrain(model, train_data, test_data, dag_folder, opt, metrics_callback, plotting_callback):
+    """
+    Retrain a model which is already DAG
+    """
+    # Prepare path for saving results
+    stage_name = "retrain_{}".format(dag_folder)
+    save_path = os.path.join(opt.exp_path, stage_name)
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    # Check if already computed
+    if os.path.exists(os.path.join(save_path, "best-model.pkl")):
+        print(stage_name, "already computed. Loading result from disk.")
+        return load(save_path, "best-model.pkl")
+
+    time0 = time.time()
+
+    # initialize stuff for learning loop
+    nlls = []
+    nlls_val = []
+    losses = []
+    losses_val = []
+    grad_norms = []
+    grad_norm_ma = [0.0] * (opt.num_train_iter + 1)
+
+    # early stopping stuff
+    best_model = copy.deepcopy(model)
+    best_nll_val = np.inf
+    patience = opt.patience
+
+    if opt.optimizer == "sgd":
+        optimizer = torch.optim.SGD(model.parameters(), lr=opt.lr)
+    elif opt.optimizer == "rmsprop":
+        # This allows the optimizer to return the learning rates for each parameters
+        monkey_patch_RMSprop(torch.optim.RMSprop)
+        optimizer = torch.optim.RMSprop(model.parameters(), lr=opt.lr)
+    else:
+        raise NotImplementedError("optimizer {} is not implemented".format(opt.optimizer))
+
+    # Learning loop:
+    for iter in range(opt.num_train_iter):
+        # compute loss
+        model.train()
+        x, mask, regime = train_data.sample(opt.train_batch_size)
+        weights, biases, extra_params = model.get_parameters(mode="wbx")
+        nll = compute_loss(x, mask, regime, model, weights, biases, extra_params,
+                           opt.intervention, opt.intervention_type,
+                           opt.intervention_knowledge)
+
+        nlls.append(nll.item())
+        model.eval()
+
+        # compute regularizer
+        # w_adj = model.get_w_adj()
+        # reg = opt.reg_coeff * compute_penalty([w_adj], p=1)
+        # reg /= w_adj.shape[0]**2
+
+        # if opt.coeff_interv_sparsity > 0 and opt.intervention_knowledge == "unknown" :
+        #     interv_w = 1 - model.gumbel_interv_w.get_proba()
+        #     group_norm = torch.norm(interv_w, p=1, dim=1, keepdim=True)
+        #     reg_interv = opt.coeff_interv_sparsity * (group_norm).sum()
+        # else:
+        #     reg_interv = torch.tensor(0)
+
+        reg = torch.tensor(0)
+        reg_interv = torch.tensor(0)
+
+        # compute augmented langrangian
+        loss = nll
+
+        # optimization step on augmented lagrangian
+        optimizer.zero_grad()
+        loss.backward()
+        _, lr = optimizer.step() if opt.optimizer == "rmsprop" else optimizer.step(), opt.lr
+
+        # compute augmented lagrangian moving average
+        losses.append(loss.item())
+        grad_norms.append(model.get_grad_norm("wbx").item())
+        grad_norm_ma[iter + 1] = grad_norm_ma[iter] + 0.01 * (grad_norms[-1] - grad_norm_ma[iter])
+
+        # compute loss on whole validation set
+        if iter % 1000 == 0:
+            with torch.no_grad():
+                x, mask, regime = test_data.sample(test_data.num_samples)
+                nll_val = compute_loss(x, mask, regime, model, weights, biases,
+                                       extra_params, opt.intervention,
+                                       opt.intervention_type,
+                                       opt.intervention_knowledge)
+                # nll_val = - torch.mean(model.compute_log_likelihood(x, weights, biases, extra_params)).item()
+                nlls_val.append(nll_val)
+                losses_val.append([iter, nll_val + reg.item()])
+
+                # nll_val the best?
+                if nll_val < best_nll_val:
+                    best_nll_val = nll_val
+                    patience = opt.patience
+                    best_model = copy.deepcopy(model)
+                else:
+                    patience -= 1
+
+        # log metrics
+        if iter % 100 == 0:
+            print("Iteration:", iter)
+            metrics_callback(stage=stage_name, step=iter,
+                             metrics={"loss": loss.item(),
+                                      "loss-val": losses_val[-1][1],
+                                      "nll": nlls[-1],
+                                      "nll-val": nlls_val[-1],
+                                      "grad-norm-moving-average": grad_norm_ma[iter + 1],
+                                      "w_prop_0": sum([(w == 0).long().sum().item() for w in weights]) /
+                                                  model.numel_weights,
+                                      "patience": patience,
+                                      "best-nll-val": best_nll_val})
+
+        # plot
+        if iter % opt.plot_freq == 0:
+            plot_learning_curves_retrain(losses, losses_val, nlls, nlls_val, save_path)
+
+        # Have we converged?
+        if patience == 0:
+            timing = time.time() - time0
+
+            # save
+            dump(best_nll_val, save_path, 'best-nll-val', txt=True)
+            dump(opt.__dict__, save_path, 'opt')
+            dump(nlls, save_path, 'nlls-train')
+            dump(nlls_val, save_path, 'nlls-val')
+            dump(losses, save_path, 'losses')
+            dump(losses_val, save_path, 'losses-val')
+            dump(grad_norms, save_path, 'grad-norms')
+            dump(grad_norm_ma[:iter], save_path, 'grad-norm-ma')
+            dump(timing, save_path, 'timing')
+
+            # plot
+            plot_learning_curves_retrain(losses, losses_val, nlls, nlls_val, save_path)
+
+            return model

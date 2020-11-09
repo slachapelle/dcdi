@@ -1,5 +1,5 @@
 """
-Code reused under copyright from external authors. No names mentioned here for anonymity, but we do not claim ownership of this code.
+Copyright Chin-Wei Huang
 """
 import numpy as np
 import torch
@@ -41,7 +41,7 @@ def oper(array, oper, axis=-1, keepdims=False):
     a_oper = oper(array)
     if keepdims:
         shape = []
-        for j, s in enumerate(array.size()):
+        for s in array.size():
             shape.append(s)
         shape[axis] = -1
         a_oper = a_oper.view(*shape)

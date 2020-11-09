@@ -21,10 +21,12 @@ def main(opt, metrics_callback, plotting_callback=None):
 
     # load data
     train_data = DataManagerFile(opt.data_path, opt.i_dataset, opt.train_samples, opt.test_samples, train=True,
-                                 normalize=opt.normalize_data, random_seed=opt.random_seed, intervention=opt.intervention)
+                                 normalize=opt.normalize_data, random_seed=opt.random_seed,
+                                 intervention=opt.intervention, regimes_to_ignore=opt.regimes_to_ignore)
     test_data = DataManagerFile(opt.data_path, opt.i_dataset, opt.train_samples, opt.test_samples, train=False,
                                 normalize=opt.normalize_data, mean=train_data.mean, std=train_data.std,
-                                random_seed=opt.random_seed, intervention=opt.intervention)
+                                random_seed=opt.random_seed, intervention=opt.intervention,
+                                regimes_to_ignore=opt.regimes_to_ignore)
 
     gt_dag = train_data.adjacency.detach().cpu().numpy()
 
@@ -90,6 +92,9 @@ if __name__ == "__main__":
                         help='Path to experiments')
     parser.add_argument('--intervention', action="store_true",
                         help='Use interventional data')
+    parser.add_argument('--regimes-to-ignore', nargs="+", type=int,
+                        help='When loading data, will remove some regimes from data set')
+
 
     # Variable selection (PNS)
     parser.add_argument('--variable-sel', action="store_true",
@@ -100,7 +105,6 @@ if __name__ == "__main__":
     # Pruning
     parser.add_argument('--pruning', action="store_true",
                         help='Perform an initial pruning step')
-
     opt = parser.parse_args()
     opt.score = 'nonlinear'
     opt.sel_method = 'gamboost'

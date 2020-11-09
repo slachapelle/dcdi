@@ -7,6 +7,7 @@ import numpy as np
 import networkx as nx
 
 import sys
+#sys.path.append("..")
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dcdi.plot import plot_adjacency
 from dcdi.utils.save import dump
@@ -21,11 +22,11 @@ def main(opt, metrics_callback=None, plotting_callback=None, verbose=False):
 
     # load data
     train_data = DataManagerFile(opt.data_path, opt.i_dataset, opt.train_samples, opt.test_samples, train=True,
-                                 normalize=opt.normalize_data,
-                                 random_seed=opt.random_seed, intervention=True)
+                                 normalize=opt.normalize_data, random_seed=opt.random_seed, intervention=True,
+                                 regimes_to_ignore=opt.regimes_to_ignore)
     test_data = DataManagerFile(opt.data_path, opt.i_dataset, opt.train_samples, opt.test_samples, train=False,
                                 normalize=opt.normalize_data, mean=train_data.mean, std=train_data.std,
-                                random_seed=opt.random_seed, intervention=True)
+                                random_seed=opt.random_seed, intervention=True, regimes_to_ignore=opt.regimes_to_ignore)
     gt_dag = train_data.adjacency.detach().cpu().numpy()
     train_data_pd = pd.DataFrame(train_data.dataset.detach().cpu().numpy())
     mask_pd = pd.DataFrame(train_data.masks)
@@ -69,6 +70,13 @@ def main(opt, metrics_callback=None, plotting_callback=None, verbose=False):
     results = f"shd: {shd},\nsid lower: {sid_cpdag[0]},\nsid upper: {sid_cpdag[1]},\nfn: {fn},\nfp: {fp},\nrev: {rev}"
     dump(results, opt.exp_path, 'results', True)
 
+    # dump(shd, opt.exp_path, 'shd', True)
+    # dump(sid_cpdag[0], opt.exp_path, 'sid_lower', True)
+    # dump(sid_cpdag[1], opt.exp_path, 'sid_upper', True)
+    # dump(fn, opt.exp_path, 'fn', True)
+    # dump(fp, opt.exp_path, 'fp', True)
+    # dump(rev, opt.exp_path, 'rev', True)
+
     np.save(os.path.join(opt.exp_path, "DAG"), dag)
 
     plot_adjacency(gt_dag, dag, opt.exp_path)
@@ -90,6 +98,8 @@ if __name__ == "__main__":
                         help='maximal number of iteration for retrain')
     parser.add_argument('--batch-size-retrain', type=int, default=500,
                         help='maximal number of iteration for retrain')
+    parser.add_argument('--regimes-to-ignore', nargs="+", type=int,
+                        help='When loading data, will remove some regimes from data set')
 
     opt = parser.parse_args()
 

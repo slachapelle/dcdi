@@ -21,13 +21,15 @@ def load_data(opt):
     train_data = DataManagerFile(opt.data_path, opt.i_dataset,
                                  opt.train_samples, opt.test_samples, train=True,
                                  normalize=opt.normalize_data,
-                                 random_seed=opt.random_seed, intervention=True)
+                                 random_seed=opt.random_seed, intervention=True,
+                                 regimes_to_ignore=opt.regimes_to_ignore)
 
     gt_dag = train_data.adjacency.detach().cpu().numpy()
     train_data_pd = pd.DataFrame(train_data.dataset.detach().cpu().numpy())
     mask_pd = pd.DataFrame(train_data.masks)
+    regimes = train_data.regimes
 
-    return train_data_pd, mask_pd, gt_dag
+    return train_data_pd, mask_pd, regimes, gt_dag
 
 
 def main(opt, metrics_callback=None, plotting_callback=None, verbose=False):
@@ -36,14 +38,17 @@ def main(opt, metrics_callback=None, plotting_callback=None, verbose=False):
     random.seed(opt.random_seed)
 
     # load data
-    train_data_pd, mask_pd, gt_dag = load_data(opt)
+    train_data_pd, mask_pd, regimes, gt_dag = load_data(opt)
 
     # run model
     if opt.model == "IGSP":
-        dag, est_dag, targets_list = run_igsp(train_data_pd, targets=mask_pd, alpha=opt.alpha,
+        dag, est_dag, targets_list = run_igsp(train_data_pd, targets=mask_pd,
+                                              regimes=regimes, alpha=opt.alpha,
                        alpha_inv=opt.alpha_inv, ci_test=opt.ci_test)
     elif opt.model == "UTIGSP":
-        dag, est_dag, targets_list, est_targets = run_ut_igsp(train_data_pd, targets=mask_pd,
+        dag, est_dag, targets_list, est_targets = run_ut_igsp(train_data_pd,
+                                                              targets=mask_pd,
+                                                              regimes=regimes,
                                    alpha=opt.alpha, alpha_inv=opt.alpha_inv,
                                    ci_test=opt.ci_test)
     else:
@@ -55,7 +60,6 @@ def main(opt, metrics_callback=None, plotting_callback=None, verbose=False):
     gt_dag_ = causaldag.classes.dag.DAG.from_amat(gt_dag)
     true_icpdag = gt_dag_.interventional_cpdag(targets_list, cpdag=gt_dag_.cpdag())
     est_icpdag = est_dag.interventional_cpdag(targets_list, cpdag=est_dag.cpdag())
-    shd_imec = true_icpdag.shd(est_icpdag)
 
     sid = float(cdt.metrics.SID(target=gt_dag, pred=dag))
     shd = float(cdt.metrics.SHD(target=gt_dag, pred=dag, double_for_anticausal=False))
@@ -63,7 +67,7 @@ def main(opt, metrics_callback=None, plotting_callback=None, verbose=False):
     fn, fp, rev = edge_errors(dag, gt_dag)
     timing = time.time() - time0
     if verbose:
-        print(f"SHD-IMEC:{shd_imec}, SID: {sid}, SHD:{shd}, SHD_CPDAG:{shd_cpdag}")
+        print(f"SHD:{shd}, SID: {sid}, SHD_CPDAG:{shd_cpdag}")
         print(f"fn: {fn}, fp:{fp}, rev:{rev}")
 
     #save
@@ -82,7 +86,6 @@ def main(opt, metrics_callback=None, plotting_callback=None, verbose=False):
 
     results = f"shd: {shd},\nsid: {sid},\nfn: {fn},\nfp: {fp},\nrev: {rev}"
     dump(results, opt.exp_path, 'results', True)
-    dump(shd_imec, opt.exp_path, 'shd_imec', True)
     np.save(os.path.join(opt.exp_path, "DAG"), dag)
 
     plot_adjacency(gt_dag, dag, opt.exp_path)
@@ -106,10 +109,12 @@ if __name__ == "__main__":
     parser.add_argument('--ci-test', type=str, default='gaussian',
                         help='Type of conditional independance test to use \
                         (gaussian, hsic, kci)')
+    parser.add_argument('--regimes-to-ignore', nargs="+", type=int,
+                        help='When loading data, will remove some regimes from data set')
     opt = parser.parse_args()
 
     opt.train_samples = 1.0
     opt.test_samples = None
-    opt.random_seed = 42
+    opt.random_seed = 43
     opt.normalize_data = False
     main(opt, verbose=True)

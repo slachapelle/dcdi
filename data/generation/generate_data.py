@@ -11,10 +11,9 @@ class dataset_generator:
     then data are generated accordingly to the chosen parameters (e.g.
     mechanisms). Can generate dataset with 'hard stochastic' interventions """
 
-    def __init__(self, mechanism, cause, intervention_type, struct_interv_distr, noise, noise_coeff, nb_nodes, expected_degree,
-                 nb_points, suffix, rescale, obs_data=True, nb_interventions=10,
-                 min_nb_target=1, max_nb_target=3, conservative=False,
-                 cover=False, verbose=True):
+    def __init__(self, mechanism, cause, intervention_type, struct_interv_distr, noise, noise_coeff,
+                 nb_nodes, expected_degree, nb_points, suffix, rescale, obs_data=True, nb_interventions=10,
+                 min_nb_target=1, max_nb_target=3, conservative=False, cover=False, verbose=True):
         """
         Generate a dataset containing interventions. The setting is similar to the
         one in the GIES paper (Characterization and greedy learning of interventional Markov
@@ -134,9 +133,6 @@ class dataset_generator:
         i = 0
 
         if(self.max_nb_target == 1):
-            # if  self.nb_interventions == self.nb_nodes:
-            #     intervention = np.random.choice(self.nb_nodes, self.nb_interventions - 1, replace=False)
-            # else:
             intervention = np.random.choice(self.nb_nodes, self.nb_interventions, replace=False)
             targets = [[i] for i in intervention]
 
@@ -189,7 +185,7 @@ class dataset_generator:
             union_set = union_set.union(set(l))
         return union_set
 
-    def _save_data(self, i, data, mask=None):
+    def _save_data(self, i, data, regimes=None, mask=None):
         if mask is None:
             data_path = os.path.join(self.folder, f'data{i+1}.npy')
             np.save(data_path, data)
@@ -202,6 +198,13 @@ class dataset_generator:
                 writer = csv.writer(f)
                 writer.writerows(mask)
 
+        if regimes is not None:
+            regime_path = os.path.join(self.folder, f'regime{i+1}.csv')
+            with open(regime_path, 'w', newline="") as f:
+                writer = csv.writer(f)
+                for regime in regimes:
+                    writer.writerow([regime])
+
     def generate(self, intervention=False):
         if self.generator is None:
             self._initialize_dag()
@@ -209,15 +212,16 @@ class dataset_generator:
         if intervention:
             data = np.zeros((self.nb_points, self.nb_nodes))
 
-            # one-liner taken from https://stackoverflow.com/questions/20348717/algo-for-dividing-a-number-into-almost-equal-whole-numbers/20348992
             num = self.nb_points
             if self.obs_data:
                 div = self.nb_interventions + 1
             else:
                 div = self.nb_interventions
+            # one-liner taken from https://stackoverflow.com/questions/20348717/algo-for-dividing-a-number-into-almost-equal-whole-numbers/20348992
             points_per_interv = [num // div + (1 if x < num % div else 0)  for x in range (div)]
             # points_per_interv = int(self.nb_points / self.nb_interventions)
             mask_intervention = []
+            regimes = []
             nb_env = self.nb_interventions
 
             # randomly pick targets
@@ -242,6 +246,7 @@ class dataset_generator:
                 end = start + points_per_interv[j]
                 data[start:end, :] = dataset
                 mask_intervention.extend([targets for i in range(points_per_interv[j])])
+                regimes.extend([j+1 for i in range(points_per_interv[j])])
 
             # setting without interventions
             if self.obs_data:
@@ -257,12 +262,13 @@ class dataset_generator:
                     start = np.cumsum(points_per_interv)[-2]
                 data[start:, :] = dataset
                 mask_intervention.extend([targets for i in range(points_per_interv[j])])
+                regimes.extend([0 for i in range(points_per_interv[j])])
 
             if self.rescale:
                 scaler = StandardScaler()
                 scaler.fit_transform(data)
-            # data = rotate(data, 45)
-            self._save_data(self.i_dataset, data, mask_intervention)
+
+            self._save_data(self.i_dataset, data, regimes, mask_intervention)
 
         else:
             self.generator.change_npoints(self.nb_points)

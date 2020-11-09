@@ -5,16 +5,17 @@ from .base_model import BaseModel
 
 
 class FlowModel(BaseModel):
+    """
+    Abstract class for normalizing flow model
+    """
     def __init__(self, num_vars, num_layers, hid_dim, num_params, nonlin="leaky-relu",
-                 intervention=False,
-                 intervention_type="perfect",
-                 intervention_knowledge="known",
-                 nb_interv=1):
+                 intervention=False, intervention_type="perfect",
+                 intervention_knowledge="known", num_regimes=1):
         super().__init__(num_vars, num_layers, hid_dim, num_params, nonlin=nonlin,
                          intervention=intervention,
                          intervention_type=intervention_type,
                          intervention_knowledge=intervention_knowledge,
-                         nb_interv=nb_interv)
+                         num_regimes=num_regimes)
         self.reset_params()
 
     def compute_log_likelihood(self, x, weights, biases, extra_params,
@@ -26,6 +27,8 @@ class FlowModel(BaseModel):
         :param x: (batch_size, num_vars)
         :param weights: list of tensor that are coherent with self.weights
         :param biases: list of tensor that are coherent with self.biases
+        :param mask: tensor, shape=(batch_size, num_vars)
+        :param regime: np.ndarray, shape=(batch_size,)
         :return: (batch_size, num_vars) log-likelihoods
         """
         density_params = self.forward_given_params(x, weights, biases, mask, regime)
@@ -39,30 +42,21 @@ class FlowModel(BaseModel):
 
 class DeepSigmoidalFlowModel(FlowModel):
     def __init__(self, num_vars, cond_n_layers, cond_hid_dim, cond_nonlin, flow_n_layers, flow_hid_dim,
-                 intervention=False, intervention_type="perfect", intervention_knowledge="known", nb_interv=1):
+                 intervention=False, intervention_type="perfect",
+                 intervention_knowledge="known", num_regimes=1):
         """
         Deep Sigmoidal Flow model
 
-        num_vars: uint
-            The number of variables
-        cond_n_layers: uint
-            The number of layers in the conditioner
-        cond_hid_dim: uint
-            The number of hidden units in the layers of the conditioner
-        cond_nonlin: str
-            The non-linearity used in the conditioner
-        flow_n_layers: uint
-            The number of DSF layers
-        flow_hid_dim: uint
-            The number of hidden units in the DSF layers
-        intervention: boolean
-            True if use interventional version of DCDI
-        intervention_type: str
-            Either perfect or imperfect
-        intervention_knowledge: str
-            Either known or unkown
-        nb_interv: uint
-
+        :param int num_vars: number of variables
+        :param int cond_n_layers: number of layers in the conditioner
+        :param int cond_hid_dim: number of hidden units in the layers of the conditioner
+        :param str cond_nonlin: type of non-linearity used in the conditioner
+        :param int flow_n_layers: number of DSF layers
+        :param int flow_hid_dim: number of hidden units in the DSF layers
+        :param boolean intervention: True if use interventional version (DCDI)
+        :param str intervention_type: Either perfect or imperfect
+        :param str intervention_knowledge: Either known or unkown
+        :param int num_regimes: total number of regimes in the data
         """
         flow_n_conditioned = flow_hid_dim
 
@@ -72,7 +66,7 @@ class DeepSigmoidalFlowModel(FlowModel):
                          intervention=intervention,
                          intervention_type=intervention_type,
                          intervention_knowledge=intervention_knowledge,
-                         nb_interv=nb_interv)
+                         num_regimes=num_regimes)
         self.cond_n_layers = cond_n_layers
         self.cond_hid_dim = cond_hid_dim
         self.cond_nonlin = cond_nonlin
@@ -100,13 +94,10 @@ class DeepSigmoidalFlowModel(FlowModel):
         """
         Compute the log likelihood of x given some density specification.
 
-        Parameters:
-        -----------
-        x: torch.Tensor, shape=(batch_size, num_vars)
-            The input for which to compute the likelihood.
-        density_params: tuple of torch.Tensor, len=n_vars, shape of elements=(batch_size, n_flow_params_per_var)
+        :param x: torch.Tensor, shape=(batch_size, num_vars), the input for which to compute the likelihood.
+        :param density_params: tuple of torch.Tensor, len=n_vars, shape of elements=(batch_size, n_flow_params_per_var)
             The parameters of the DSF model that were produced by the conditioner.
-
+        :return: pseudo joint log-likelihood
         """
         # Convert the shape to (batch_size, n_vars, n_flow_params_per_var)
         density_params = torch.cat([x[None, :, :] for x in density_params], dim=0).transpose(0, 1)
@@ -137,7 +128,8 @@ class DeepSigmoidalFlowModel(FlowModel):
         assert x.shape[0] == h.shape[0]
         assert x.shape[1] == h.shape[1]
         zeros = Variable(torch.zeros(x.shape[0], self.num_vars))
-        pseudo_joint_nll = - log_normal(h, zeros, zeros + 1.0) - logdet  # Not the joint NLL until we have a DAG
+        # Not the joint NLL until we have a DAG
+        pseudo_joint_nll = - log_normal(h, zeros, zeros + 1.0) - logdet
 
         # We return the log product (averaged) of conditionals instead of the logp for each conditional.
         #      Shape is (batch x 1) instead of (batch x n_vars).

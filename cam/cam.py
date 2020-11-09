@@ -1,5 +1,30 @@
-"""
-Code reused under copyright from external authors. No names mentioned here for anonymity, but we do not claim ownership of this code.
+"""CAM algorithm.
+
+Imported from the Pcalg package.
+Adapted from:
+
+Author: Diviyan Kalainathan
+.. MIT License
+..
+.. Copyright (c) 2018 Diviyan Kalainathan
+..
+.. Permission is hereby granted, free of charge, to any person obtaining a copy
+.. of this software and associated documentation files (the "Software"), to deal
+.. in the Software without restriction, including without limitation the rights
+.. to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+.. copies of the Software, and to permit persons to whom the Software is
+.. furnished to do so, subject to the following conditions:
+..
+.. The above copyright notice and this permission notice shall be included in all
+.. copies or substantial portions of the Software.
+..
+.. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.. IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.. FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+.. AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.. LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+.. OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+.. SOFTWARE.
 """
 import os
 import uuid
@@ -107,9 +132,9 @@ class CAM_with_score(GraphModel):
                           '{TARGETS_TRAIN}': 'targets_train.csv',
                           '{TARGETS_VALID}': 'targets_valid.csv',
                           '{SCORE}': 'SEMGAM',
-                          '{VARSEL}': 'FALSE', #TRUE
+                          '{VARSEL}': 'TRUE',
                           '{SELMETHOD}': 'selGamBoost',
-                          '{PRUNING}': 'FALSE', #TRUE
+                          '{PRUNING}': 'TRUE',
                           '{PRUNMETHOD}': 'selGam',
                           '{NJOBS}': str(SETTINGS.NJOBS),
                           '{CUTOFF}': str(0.001),
@@ -123,40 +148,6 @@ class CAM_with_score(GraphModel):
         self.prunmethod = prunmethod
         self.njobs = SETTINGS.get_default(njobs=njobs)
         self.verbose = SETTINGS.get_default(verbose=verbose)
-
-    def orient_undirected_graph(self, data, graph, score='obs',
-                                verbose=False, **kwargs):
-        """Run CAM on an undirected graph."""
-        # Building setup w/ arguments.
-        raise ValueError("CAM cannot (yet) be ran with a skeleton/directed graph.")
-
-    def orient_directed_graph(self, data, graph, *args, **kwargs):
-        """Run CAM on a directed_graph."""
-        raise ValueError("CAM cannot (yet) be ran with a skeleton/directed graph.")
-
-    def create_graph_from_data(self, data, **kwargs):
-        """Apply causal discovery on observational data using CAM.
-
-        Args:
-            data (pandas.DataFrame): DataFrame containing the data
-
-        Returns:
-            networkx.DiGraph: Solution given by the CAM algorithm.
-        """
-        # Building setup w/ arguments.
-        print(self.variablesel)
-        self.arguments['{SCORE}'] = self.scores[self.score]
-        self.arguments['{CUTOFF}'] = str(self.cutoff)
-        self.arguments['{VARSEL}'] = str(self.variablesel).upper()
-        self.arguments['{SELMETHOD}'] = self.var_selection[self.selmethod]
-        self.arguments['{PRUNING}'] = str(self.pruning).upper()
-        self.arguments['{PRUNMETHOD}'] = self.var_selection[self.prunmethod]
-        self.arguments['{NJOBS}'] = str(self.njobs)
-        self.arguments['{VERBOSE}'] = str(self.verbose).upper()
-        results = self._run_cam(data, verbose=self.verbose)
-
-        return nx.relabel_nodes(nx.DiGraph(results),
-                                {idx: i for idx, i in enumerate(data.columns)})
 
     def get_score(self, train_data, valid_data, train_mask=None,
                   valid_mask=None, **kwargs):

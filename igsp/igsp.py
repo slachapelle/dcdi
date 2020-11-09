@@ -9,63 +9,49 @@ from pprint import pprint
 import random
 import os
 
-def format_to_igsp(data, target_raw, intervention_knowledge=False):
+def format_to_igsp(data, targets, regimes, intervention_knowledge=False):
     """
-    From the data and target, split the dataset by settings
+    From the data, targets and regimes, split the dataset by interventional targets
+    in order to run the IGSP or UTIGSP method.
     Return:
-        obs_samples (np array): the observational samples
-        iv_samples_list (list): a list of np array for each
+        nodes (set): a set of the graph nodes
+        obs_samples (nd array): the observational samples
+        iv_samples_list (list): a list of nd array for each
                                 interventional setting
-        target_index (np array): contains the interv target
+        targets_list (list): contains the interv target
+                             for each element of iv_samples_list
     """
     data = data.values
-
     nodes = set(range(data.shape[1]))
-    targets = np.zeros(target_raw.shape[0])
-    target_raw += 1
-    iv_samples_list = []
-
+    targets += 1
     # replace the nan
-    target_raw = np.nan_to_num(target_raw)
-    target_index = np.unique(target_raw, axis=0)
+    targets = np.nan_to_num(targets)
+    n_regimes = np.unique(regimes, axis=0).shape[0]
 
-    # fill targets with the target index
-    for i, target in enumerate(target_raw):
-        for j in range(target_index.shape[0]):
-            if np.array_equal(target_index[j], target):
-                targets[i] = j
+    iv_samples_list = []
+    regime2target = {}
+
+    # populate the dict regime2target
+    for i, t in enumerate(regimes):
+        if t not in regime2target:
+            tmp_list = []
+            for t_raw in targets[i]:
+                if t_raw != 0:
+                    tmp_list.append(int(t_raw)-1)
+            regime2target[t] = tmp_list
 
     # split the dataset for each setting
-    for j in range(target_index.shape[0]):
-        setting = data[targets == j]
-        if np.sum(target_index[j]) == 0:
+    targets_list = []
+    for j in range(n_regimes):
+        setting = data[regimes == j]
+        if j == 0:
             # observational case
             obs_samples = setting
         else:
             iv_samples_list.append(setting)
-
-    target_index = np.delete(target_index, 0, 0)
-    targets_list = []
-    for i in range(target_index.shape[0]):
-        tmp_list = []
-        for t in target_index[i]:
-            if t != 0:
-                tmp_list.append(int(t)-1)
-        targets_list.append(tmp_list)
-
-    data2, target_raw2 = reconstruct(nodes, obs_samples, iv_samples_list, targets_list)
+            targets_list.append(regime2target[j])
 
     return nodes, obs_samples, iv_samples_list, targets_list
-
-
-def reconstruct(nodes, obs_samples, iv_samples_list, targets_list):
-    data = np.concatenate(iv_samples_list, axis=0)
-    data = np.concatenate([obs_samples, data], axis=0)
-    target_raw = targets_list[0] * obs_samples.shape[0]
-    for i in range(0, len(iv_samples_list)):
-        target_raw.extend(targets_list[i] * iv_samples_list[i].shape[0])
-
-    return data, target_raw
 
 
 def prepare_igsp(obs_samples, iv_samples_list, targets_list,
@@ -100,35 +86,41 @@ def prepare_igsp(obs_samples, iv_samples_list, targets_list,
     return ci_tester, invariance_tester
 
 
-def run_igsp(data, targets, alpha=1e-3, alpha_inv=1e-3, ci_test="gaussian"):
+def run_igsp(data, targets, regimes, alpha=1e-3, alpha_inv=1e-3, ci_test="gaussian"):
     """
     Apply the IGSP method.
     Return:
-        est_dag: the estimated dag
+        dag(nd array): the adjacency matrix of the estimated DAG
+        est_dag(object): the estimated dag as a DAG object from causaldag
+        setting_list(list): list containing the targets for each setting
     """
 
-    nodes, obs_samples, iv_samples_list, targets_list = format_to_igsp(data, targets)
+    nodes, obs_samples, iv_samples_list, targets_list = format_to_igsp(data, targets, regimes)
     ci_tester, invariance_tester = prepare_igsp(obs_samples,
                                                 iv_samples_list, targets_list,
                                                 alpha, alpha_inv, ci_test)
 
     # Run IGSP
     setting_list = [dict(interventions=targets) for targets in targets_list]
+    # setting_list = dict(interventions=targets_list)
+    print(setting_list)
     est_dag = igsp(setting_list, nodes, ci_tester, invariance_tester, nruns=5)
     dag = est_dag.to_amat()[0]
 
     return dag, est_dag, setting_list
 
 
-def run_ut_igsp(data, targets, alpha=1e-3, alpha_inv=1e-3, ci_test="gaussian"):
+def run_ut_igsp(data, targets, regimes, alpha=1e-3, alpha_inv=1e-3, ci_test="gaussian"):
     """
     Apply the UT-IGSP method.
     Return:
-        est_dag: the estimated dag
-        est_targets_list: the estimated target
+        dag(nd array): the adjacency matrix of the estimated DAG
+        est_dag(object): the estimated dag as a DAG object from causaldag
+        setting_list(list): list containing the targets per setting
+        est_targets_list(list): list of the estimated targets per setting
     """
 
-    nodes, obs_samples, iv_samples_list, targets_list = format_to_igsp(data, targets)
+    nodes, obs_samples, iv_samples_list, targets_list = format_to_igsp(data, targets, regimes)
     ci_tester, invariance_tester = prepare_igsp(obs_samples,
                                             iv_samples_list, targets_list,
                                             alpha, alpha_inv, ci_test)
@@ -139,4 +131,3 @@ def run_ut_igsp(data, targets, alpha=1e-3, alpha_inv=1e-3, ci_test="gaussian"):
     dag = est_dag.to_amat()[0]
 
     return dag, est_dag, setting_list, est_targets_list
-

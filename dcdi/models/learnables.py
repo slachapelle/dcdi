@@ -1,3 +1,22 @@
+"""
+GraN-DAG
+
+Copyright © 2019 Sébastien Lachapelle, Philippe Brouillard, Tristan Deleu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
+Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+"""
 import sys
 import math
 sys.path.insert(0, '../')
@@ -14,14 +33,14 @@ class LearnableModel(BaseModel):
     def __init__(self, num_vars, num_layers, hid_dim, num_params,
                  nonlin="leaky-relu", intervention=False,
                  intervention_type="perfect",
-                 intervention_knowledge="known", nb_interv=1):
+                 intervention_knowledge="known", num_regimes=1):
 
         super(LearnableModel, self).__init__(num_vars, num_layers, hid_dim, num_params,
                                              nonlin=nonlin,
                                              intervention=intervention,
                                              intervention_type=intervention_type,
                                              intervention_knowledge=intervention_knowledge,
-                                             nb_interv=nb_interv)
+                                             num_regimes=num_regimes)
         self.reset_params()
 
     def compute_log_likelihood(self, x, weights, biases, extra_params,
@@ -33,6 +52,8 @@ class LearnableModel(BaseModel):
         :param x: (batch_size, num_vars)
         :param weights: list of tensor that are coherent with self.weights
         :param biases: list of tensor that are coherent with self.biases
+        :param mask: tensor, shape=(batch_size, num_vars)
+        :param regime: np.ndarray, shape=(batch_size,)
         :return: (batch_size, num_vars) log-likelihoods
         """
         density_params = self.forward_given_params(x, weights, biases, mask, regime)
@@ -41,32 +62,16 @@ class LearnableModel(BaseModel):
         if len(extra_params) != 0:
             extra_params = self.transform_extra_params(self.extra_params)
         log_probs = []
-        if self.intervention_knowledge == 'unknown' and self.intervention_type == 'perfect' and self.intervention:
-            for i in range(self.num_vars):
 
-                density_param = list(torch.unbind(density_params[i], 1))
-                if len(extra_params) != 0:
-                    density_param.extend(list(torch.unbind(extra_params[i], 0)))
-                conditional = self.get_distribution(density_param)
-                x_d = x[:, i].detach() if detach else x[:, i]
-                log_prob_obs = conditional.log_prob(x_d) * self.interv_w[:, i]
-                log_prob_interv = torch.distributions.normal.Normal(self.interv_param[i,0],
-                                          self.interv_param[i,1]).log_prob(x_d) * (1 - self.interv_w[:, i])
-                log_prob = (log_prob_obs + log_prob_interv).unsqueeze(1)
+        for i in range(self.num_vars):
+            density_param = list(torch.unbind(density_params[i], 1))
+            if len(extra_params) != 0:
+                density_param.extend(list(torch.unbind(extra_params[i], 0)))
+            conditional = self.get_distribution(density_param)
+            x_d = x[:, i].detach() if detach else x[:, i]
+            log_probs.append(conditional.log_prob(x_d).unsqueeze(1))
 
-                log_probs.append(log_prob)
-            return torch.cat(log_probs, 1)
-
-        else:
-            for i in range(self.num_vars):
-                density_param = list(torch.unbind(density_params[i], 1))
-                if len(extra_params) != 0:
-                    density_param.extend(list(torch.unbind(extra_params[i], 0)))
-                conditional = self.get_distribution(density_param)
-                x_d = x[:, i].detach() if detach else x[:, i]
-                log_probs.append(conditional.log_prob(x_d).unsqueeze(1))
-
-            return torch.cat(log_probs, 1)
+        return torch.cat(log_probs, 1)
 
     def get_distribution(self, dp):
         raise NotImplementedError
@@ -80,12 +85,12 @@ class LearnableModel_NonLinGaussANM(LearnableModel):
                  intervention=False,
                  intervention_type="perfect",
                  intervention_knowledge="known",
-                 nb_interv=1):
+                 num_regimes=1):
         super(LearnableModel_NonLinGaussANM, self).__init__(num_vars, num_layers, hid_dim, 1, nonlin=nonlin,
                                                             intervention=intervention,
                                                             intervention_type=intervention_type,
                                                             intervention_knowledge=intervention_knowledge,
-                                                            nb_interv=nb_interv)
+                                                            num_regimes=num_regimes)
         # extra parameters are log_std
         extra_params = np.ones((self.num_vars,))
         np.random.shuffle(extra_params)
