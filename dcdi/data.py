@@ -129,11 +129,14 @@ class DataManagerFile(object):
         # Load the graph
         adjacency = np.load(os.path.join(self.file_path, f"DAG{self.i_dataset}.npy"))
         self.adjacency = torch.as_tensor(adjacency).type(torch.Tensor)
-        if self.dcd:
-            assert not self.intervention, "DCD must be used with intervention==False"
-            name_data = f"data_interv{self.i_dataset}.npy"
+
+        if not self.intervention:
+            if self.dcd:
+                name_data = f"data_interv{self.i_dataset}.npy"
+            else:
+                name_data = f"data{self.i_dataset}.npy"
         else:
-            name_data = f"data{self.i_dataset}.npy"
+            name_data = f"data_interv{self.i_dataset}.npy"
 
         # Load data
         self.data_path = os.path.join(self.file_path, name_data)
